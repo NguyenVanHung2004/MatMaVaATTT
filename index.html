@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng dụng Steganography với RSA</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: #f0f2f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #1a73e8;
+            border-bottom: 2px solid #1a73e8;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input[type="file"],
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #1557b0;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .preview-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        #imagePreview {
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 10px;
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background: #f8f9fa;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .progress {
+            width: 0%;
+            height: 100%;
+            background: #1a73e8;
+            transition: width 0.3s;
+        }
+
+        .status {
+            color: #666;
+            text-align: center;
+            margin: 10px 0;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Ứng dụng Steganography với RSA</h1>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('encrypt')">Mã hóa tin nhắn</button>
+            <button class="tab" onclick="switchTab('decrypt')">Giải mã tin nhắn</button>
+        </div>
+
+        <div id="encrypt-tab" class="tab-content active">
+            <div class="form-group">
+                <label>Chọn hình ảnh:</label>
+                <input type="file" id="encryptImage" accept="image/*" onchange="previewImage(this)">
+                <div class="preview-container">
+                    <img id="imagePreview">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Nhập tin nhắn cần mã hóa:</label>
+                <textarea id="messageToEncrypt"></textarea>
+            </div>
+
+            <button onclick="encryptAndEmbed()">Mã hóa và nhúng tin nhắn</button>
+
+            <div class="progress-bar" id="encryptProgress">
+                <div class="progress"></div>
+            </div>
+            <div class="status" id="encryptStatus"></div>
+            <div class="result" id="encryptResult"></div>
+        </div>
+
+        <div id="decrypt-tab" class="tab-content">
+            <div class="form-group">
+                <label>Chọn hình ảnh cần giải mã:</label>
+                <input type="file" id="decryptImage" accept="image/*">
+            </div>
+
+            <div class="form-group">
+                <label>Chọn file khóa bí mật (private_key.json):</label>
+                <input type="file" id="privateKey">
+            </div>
+
+            <button onclick="extractAndDecrypt()">Giải mã tin nhắn</button>
+
+            <div class="progress-bar" id="decryptProgress">
+                <div class="progress"></div>
+            </div>
+            <div class="status" id="decryptStatus"></div>
+            <div class="result" id="decryptResult"></div>
+        </div>
+    </div>
+
+    <script>
+        // Class để tạo số ngẫu nhiên
+       class SimpleRandom {
+            constructor(seed) {
+                this.seed = BigInt(seed);
+            }
+
+            next() {
+                this.seed = (this.seed * BigInt(1103515245) + BigInt(12345)) % BigInt(2 ** 31);
+                return this.seed;
+            }
+        }
+        // Utility functions for text encoding/decoding
+            function stringToHex(str) {
+                const encoder = new TextEncoder();
+                const bytes = encoder.encode(str);
+                return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+
+            function hexToString(hex) {
+                const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                return new TextDecoder().decode(bytes);
+            }
+
+
+        // Kiểm tra số nguyên tố Miller-Rabin
+        function millerRabin(n, k = 40, randomGen) {
+            const nBig = BigInt(n);
+            if (nBig <= BigInt(1)) return false;
+            if (nBig <= BigInt(3)) return true;
+            if (nBig % BigInt(2) === BigInt(0)) return false;
+
+            let r = BigInt(0);
+            let s = nBig - BigInt(1);
+            while (s % BigInt(2) === BigInt(0)) {
+                r += BigInt(1);
+                s /= BigInt(2);
+            }
+
+            for (let i = 0; i < k; i++) {
+                const a = (randomGen.next() % (nBig - BigInt(2))) + BigInt(2);
+                let x = modPow(a, s, nBig);
+                if (x === BigInt(1) || x === nBig - BigInt(1)) continue;
+
+                let continueLoop = false;
+                for (let j = BigInt(0); j < r - BigInt(1); j++) {
+                    x = modPow(x, BigInt(2), nBig);
+                    if (x === nBig - BigInt(1)) {
+                        continueLoop = true;
+                        break;
+                    }
+                }
+                if (continueLoop) continue;
+                return false;
+            }
+            return true;
+        }
+
+        // Tính lũy thừa modulo
+        function modPow(base, exponent, modulus) {
+            if (modulus === BigInt(1)) return BigInt(0);
+            let result = BigInt(1);
+            base = BigInt(base) % modulus;
+            exponent = BigInt(exponent);
+
+            while (exponent > BigInt(0)) {
+                if (exponent % BigInt(2) === BigInt(1)) {
+                    result = (result * base) % modulus;
+                }
+                base = (base * base) % modulus;
+                exponent = exponent / BigInt(2);
+            }
+            return result;
+        }
+
+        // Tạo số nguyên tố lớn
+        function generateLargePrime(bits, randomGen) {
+            const maxIterations = 1000; // Prevent infinite loop
+            let iterations = 0;
+            while (iterations < maxIterations) {
+                const bitsBig = BigInt(bits);
+                const maxVal = (BigInt(1) << bitsBig) - BigInt(1);
+                const minVal = BigInt(1) << (bitsBig - BigInt(1));
+                const p = (randomGen.next() % (maxVal - minVal)) + minVal;
+                if (millerRabin(p, 40, randomGen)) {
+                    return p;
+                }
+                iterations++;
+            }
+            throw new Error("Failed to generate prime number after maximum iterations");
+        }
+
+        // Tạo khóa RSA
+        function generateRsaKeys(bits) {
+            const seed = 42;
+            const randomGen = new SimpleRandom(seed);
+            const p = generateLargePrime(Math.floor(bits / 2), randomGen);
+            const q = generateLargePrime(Math.floor(bits / 2), randomGen);
+            const n = p * q;
+            const phi = (p - BigInt(1)) * (q - BigInt(1));
+            const e = BigInt(65537);
+            const d = modInverse(e, phi);
+            return [[e, n], [d, n]];
+        }
+
+        // Tính nghịch đảo modulo
+        function modInverse(a, m) {
+            let m0 = BigInt(m);
+            let x0 = BigInt(0);
+            let x1 = BigInt(1);
+            let a0 = BigInt(a);
+
+            if (m === BigInt(1)) return BigInt(0);
+
+            while (a0 > BigInt(1)) {
+                const q = a0 / m0;
+                let t = m0;
+                m0 = a0 % m0;
+                a0 = t;
+                t = x0;
+                x0 = x1 - q * x0;
+                x1 = t;
+            }
+
+            if (x1 < BigInt(0)) x1 += BigInt(m);
+            return x1;
+        }
+
+        // Mã hóa RSA
+        function rsaEncrypt(message, publicKey) {
+                const [e, n] = publicKey;
+                const messageHex = stringToHex(message);
+                const messageInt = BigInt('0x' + messageHex);
+                return modPow(messageInt, e, n).toString();
+            }
+
+        // Giải mã RSA
+        function rsaDecrypt(cipherInt, privateKey) {
+                const [d, n] = privateKey;
+                const messageInt = modPow(BigInt(cipherInt), d, n);
+                const hexString = messageInt.toString(16);
+                // Ensure even length for hex string
+                const paddedHex = hexString.length % 2 ? '0' + hexString : hexString;
+                return hexToString(paddedHex);
+            }
+
+        // Nhúng tin nhắn vào ảnh
+        async function embedMessageIntoImage(imageData, message) {
+            const binary = message.split('').map(char =>
+                char.charCodeAt(0).toString(2).padStart(8, '0')
+            ).join('') + '1111111111111110';
+
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    let dataIndex = 0;
+
+                    for (let i = 0; i < data.length && dataIndex < binary.length; i += 4) {
+                        for (let j = 0; j < 3 && dataIndex < binary.length; j++) {
+                            data[i + j] = (data[i + j] & ~1) | parseInt(binary[dataIndex]);
+                            dataIndex++;
+                        }
+                    }
+
+                    ctx.putImageData(imageData, 0, 0);
+                    resolve(canvas.toDataURL('image/png'));
+                };
+                img.src = imageData;
+            });
+        }
+
+        // Trích xuất tin nhắn từ ảnh
+        async function extractMessageFromImage(imageData) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    let binaryMessage = '';
+
+                    for (let i = 0; i < data.length; i += 4) {
+                        for (let j = 0; j < 3; j++) {
+                            binaryMessage += (data[i + j] & 1).toString();
+                            if (binaryMessage.endsWith('1111111111111110')) {
+                                binaryMessage = binaryMessage.slice(0, -16);
+                                const message = [];
+                                for (let k = 0; k < binaryMessage.length; k += 8) {
+                                    message.push(String.fromCharCode(parseInt(binaryMessage.slice(k, k + 8), 2)));
+                                }
+                                resolve(message.join(''));
+                                return;
+                            }
+                        }
+                    }
+                    resolve(null);
+                };
+                img.src = imageData;
+            });
+        }
+
+        // Cập nhật các hàm xử lý sự kiện của bạn
+        async function encryptAndEmbed() {
+            const image = document.getElementById('encryptImage').files[0];
+            const message = document.getElementById('messageToEncrypt').value;
+            const progressBar = document.getElementById('encryptProgress');
+            const status = document.getElementById('encryptStatus');
+            const result = document.getElementById('encryptResult');
+
+            if (!image || !message) {
+                showResult(result, 'Vui lòng chọn hình ảnh và nhập tin nhắn!', true);
+                return;
+            }
+
+            try {
+                updateProgress(progressBar, status, 20);
+
+                // Đọc file ảnh
+                const imageData = await readFileAsDataURL(image);
+                updateProgress(progressBar, status, 40);
+
+                // Tạo khóa RSA
+                const [publicKey, privateKey] = generateRsaKeys(1024);
+                updateProgress(progressBar, status, 60);
+
+                // Mã hóa tin nhắn
+                const encrypted = rsaEncrypt(message, publicKey);
+                updateProgress(progressBar, status, 80);
+
+                // Nhúng tin nhắn đã mã hóa vào ảnh
+                const encodedImage = await embedMessageIntoImage(imageData, encrypted);
+                updateProgress(progressBar, status, 90);
+
+                // Tạo link tải xuống
+                const downloadLink = document.createElement('a');
+                downloadLink.href = encodedImage;
+                downloadLink.download = 'encoded_image.png';
+                downloadLink.click();
+
+                // Lưu khóa
+                const privateKeyBlob = new Blob([JSON.stringify(privateKey.map(String))],
+                    { type: 'application/json' });
+                const privateKeyUrl = URL.createObjectURL(privateKeyBlob);
+                const privateKeyLink = document.createElement('a');
+                privateKeyLink.href = privateKeyUrl;
+                privateKeyLink.download = 'private_key.json';
+                privateKeyLink.click();
+
+                updateProgress(progressBar, status, 100);
+                showResult(result, 'Đã mã hóa và nhúng tin nhắn thành công! Hình ảnh và khóa bí mật đã được tải xuống.');
+            } catch (error) {
+                showResult(result, 'Có lỗi xảy ra: ' + error.message, true);
+            }
+        }
+
+        async function extractAndDecrypt() {
+            const image = document.getElementById('decryptImage').files[0];
+            const privateKeyFile = document.getElementById('privateKey').files[0];
+            const progressBar = document.getElementById('decryptProgress');
+            const status = document.getElementById('decryptStatus');
+            const result = document.getElementById('decryptResult');
+
+            if (!image || !privateKeyFile) {
+                showResult(result, 'Vui lòng chọn hình ảnh và file khóa bí mật!', true);
+                return;
+            }
+
+            try {
+                updateProgress(progressBar, status, 20);
+
+                // Đọc file ảnh
+                const imageData = await readFileAsDataURL(image);
+                updateProgress(progressBar, status, 40);
+
+                // Đọc khóa bí mật
+                const privateKeyText = await readFileAsText(privateKeyFile);
+                const privateKey = JSON.parse(privateKeyText).map(BigInt);
+                updateProgress(progressBar, status, 60);
+
+                // Trích xuất tin nhắn đã mã hóa
+                const extractedMessage = await extractMessageFromImage(imageData);
+                updateProgress(progressBar, status, 80);
+
+                if (!extractedMessage) {
+                    throw new Error('Không tìm thấy tin nhắn trong ảnh');
+                }
+
+                // Giải mã tin nhắn
+                const decryptedMessage = rsaDecrypt(extractedMessage, privateKey);
+                updateProgress(progressBar, status, 100);
+
+                showResult(result, 'Tin nhắn đã giải mã: ' + decryptedMessage);
+            } catch (error) {
+                showResult(result, 'Có lỗi xảy ra: ' + error.message, true);
+            }
+        }
+
+        // Hàm tiện ích
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = e => reject(e);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = e => reject(e);
+                reader.readAsText(file);
+            });
+        }
+
+        // Giữ nguyên các hàm UI của bạn
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.getElementById(tabName + '-tab').classList.add('active');
+            document.querySelector(`.tab[onclick="switchTab('${tabName}')"]`).classList.add('active');
+        }
+
+        function previewImage(input) {
+            const preview = document.getElementById('imagePreview');
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function updateProgress(progressBar, status, progress) {
+            progressBar.style.display = 'block';
+            progressBar.querySelector('.progress').style.width = `${progress}%`;
+            status.textContent = `Đang xử lý... ${progress}%`;
+            status.style.display = 'block';
+        }
+
+        function showResult(resultDiv, message, isError = false) {
+            resultDiv.style.display = 'block';
+            resultDiv.style.background = isError ? '#ffe6e6' : '#e6ffe6';
+            resultDiv.style.color = isError ? '#d32f2f' : '#1b5e20';
+            resultDiv.textContent = message;
+        }
+    </script>
+</body>
+
+</html>
